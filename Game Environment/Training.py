@@ -3,6 +3,7 @@
 import numpy as np
 import pickle
 import gymnasium as gym
+import matplotlib.pyplot as plt
 
 # hyperparameters
 H = 200 # number of hidden layer neurons
@@ -10,9 +11,10 @@ batch_size = 10 # every how many episodes to do a param update?
 learning_rate = 1e-4
 gamma = 0.99 # discount factor for reward
 decay_rate = 0.99 # decay factor for RMSProp leaky sum of grad^2
-resume = False # resume from previous checkpoint?
-render = True
-
+resume = True # resume from previous checkpoint?
+render = False
+episode_rewards = []
+running_rewards = []
 # model initialization
 D = 80 * 80 # input dimensionality: 80x80 grid
 if resume:
@@ -65,7 +67,7 @@ def policy_backward(eph, epdlogp):
   dW1 = np.dot(dh.T, epx)
   return {'W1':dW1, 'W2':dW2}
 
-env = gym.make("Pong-v0", render_mode='human', obs_type="rgb" )
+env = gym.make("Pong-v0" )
 observation = env.reset()
 prev_x = None # used in computing the difference frame
 xs,hs,dlogps,drs = [],[],[],[]
@@ -124,6 +126,35 @@ while True:
         rmsprop_cache[k] = decay_rate * rmsprop_cache[k] + (1 - decay_rate) * g**2
         model[k] += learning_rate * g / (np.sqrt(rmsprop_cache[k]) + 1e-5)
         grad_buffer[k] = np.zeros_like(v) # reset batch gradient buffer
+
+        # Append the reward to the list
+    episode_rewards.append(reward_sum)
+        
+        # Calculate and append the running reward
+    running_reward = reward_sum if running_reward is None else running_reward * 0.99 + reward_sum * 0.01
+    running_rewards.append(running_reward)
+        
+    print(f'resetting env. episode reward total was {reward_sum}. running mean: {running_reward}')
+
+    if episode_number % 200 == 0:
+        pickle.dump(model, open('save.p', 'wb'))
+        # Plot rewards every 100 episodes
+        plt.figure(figsize=(12, 5))
+        plt.subplot(121)
+        plt.plot(episode_rewards)
+        plt.xlabel('Episode')
+        plt.ylabel('Total Reward')
+        plt.title('Episode Rewards')
+        plt.subplot(122)
+        plt.plot(running_rewards)
+        plt.xlabel('Episode')
+        plt.ylabel('Running Reward')
+        plt.title('Running Rewards')
+        plt.show()
+
+    reward_sum = 0
+    observation = env.reset() # reset env
+    prev_x = None
 
     # boring book-keeping
     running_reward = reward_sum if running_reward is None else running_reward * 0.99 + reward_sum * 0.01
